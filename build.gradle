@@ -11,8 +11,6 @@ repositories {
 }
 
 loom {
-	splitEnvironmentSourceSets()
-
 	mods {
 		"polymer-filebin" {
 			sourceSet sourceSets.main
@@ -28,7 +26,11 @@ dependencies {
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
-	implementation "eu.pb4:polymer-core:0.17.5+26.2";
+	implementation "eu.pb4:polymer-resource-pack:${project.polymer_version}"
+
+	// Test environment: moretools bundles polymer 0.17.2; keep polymer-core on the newer version at dev runtime
+	localRuntime "eu.pb4:polymer-core:${project.polymer_version}"
+	localRuntime files("moretools-1.10.1+26.2.jar")
 }
 
 processResources {

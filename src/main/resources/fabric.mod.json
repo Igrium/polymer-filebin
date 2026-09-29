@@ -2,16 +2,15 @@
 	"schemaVersion": 1,
 	"id": "polymer-filebin",
 	"version": "${version}",
-	"name": "PolymerFilebin",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"name": "Polymer Filebin",
+	"description": "Automatically hosts Polymer resource packs on Filebin, so no HTTP port needs to be exposed (works with e4mc and similar tunnels).",
 	"authors": [
-		"Me!"
+		"Igrium"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"sources": "https://github.com/Igrium/polymer-filebin"
 	},
-	"license": "CC0-1.0",
+	"license": "LGPL-3.0",
 	"icon": "assets/polymer-filebin/icon.png",
 	"environment": "*",
 	"entrypoints": {
@@ -27,6 +26,6 @@
 		"minecraft": "~26.2",
 		"java": ">=25",
 		"fabric-api": "*",
-		"polymer-core": "*"
+		"polymer-resource-pack": "*"
 	}
 }
