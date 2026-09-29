@@ -1,3 +1,7 @@
 [submodule "polymer"]
 	path = polymer
 	url = https://github.com/Patbox/polymer
+[submodule "moretools"]
+	path = moretools
+	url = https://github.com/JongWasTaken/moretools.git
+	branch = 26.2
