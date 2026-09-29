@@ -6,6 +6,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -17,7 +18,6 @@ import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -48,7 +48,6 @@ public class PackHost {
     private final FilebinConfig config;
     private final FilebinClient client;
     private final ScheduledExecutorService executor;
-    private @Nullable ScheduledFuture<?> recheckTask;
 
     private volatile State state = State.WAITING_FOR_PACK;
     private volatile @Nullable String error;
@@ -69,13 +68,13 @@ public class PackHost {
 
     public void start() {
         long interval = Math.max(1, config.recheckIntervalMinutes);
-        recheckTask = executor.scheduleWithFixedDelay(this::recheck, interval, interval, TimeUnit.MINUTES);
+        executor.scheduleWithFixedDelay(this::recheck, interval, interval, TimeUnit.MINUTES);
+        executor.scheduleWithFixedDelay(this::retryIfFailed, 1, 1, TimeUnit.MINUTES);
         // Keep the download link fresh so joining players never wait on a request.
         executor.scheduleWithFixedDelay(this::refreshLinkIfNeeded, 30, 30, TimeUnit.SECONDS);
     }
 
     public void stop() {
-        if (recheckTask != null) recheckTask.cancel(false);
         executor.shutdownNow();
     }
 
@@ -239,17 +238,18 @@ public class PackHost {
 
     private DownloadLink resolveLink(UploadedPack pack, boolean allowReupload) {
         try {
-            var url = client.resolveDownloadUrl(config.bin, pack.filename());
+            var url = resolveWithRetry(pack.filename(), !allowReupload);
             var newLink = new DownloadLink(url.toString(), Instant.now().plusSeconds(Math.max(30, config.downloadLinkLifetime)));
             link = newLink;
             return newLink;
         } catch (FilebinClient.FilebinException e) {
-            if (e.status == 404 && allowReupload && packPath != null) {
+            var path = packPath;
+            if (e.status == 404 && allowReupload && path != null) {
                 // The file (or whole bin) is gone; put it back.
                 PolymerFilebin.LOGGER.warn("Resource pack is missing from Filebin, re-uploading");
-                upload(packPath, pack.sha1(), true);
+                upload(path, pack.sha1(), true);
                 var current = link;
-                if (current != null) return current;
+                if (state == State.READY && current != null) return current;
             }
             throw new RuntimeException("Failed to resolve download link", e);
         } catch (IOException e) {
@@ -257,6 +257,21 @@ public class PackHost {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Filebin briefly answers 404 right after a file is (re-)uploaded, so retry for a few seconds in that case.
+     */
+    private URI resolveWithRetry(String filename, boolean justUploaded) throws IOException, InterruptedException {
+        int attempts = justUploaded ? 6 : 1;
+        for (int i = 1; ; i++) {
+            try {
+                return client.resolveDownloadUrl(config.bin, filename);
+            } catch (FilebinClient.FilebinException e) {
+                if (e.status != 404 || i >= attempts) throw e;
+                Thread.sleep(500L * i);
+            }
         }
     }
 
@@ -271,6 +286,14 @@ public class PackHost {
             } catch (Exception e) {
                 PolymerFilebin.LOGGER.warn("Failed to refresh resource pack download link", e);
             }
+        }
+    }
+
+    private void retryIfFailed() {
+        var path = packPath;
+        if (state == State.FAILED && path != null) {
+            PolymerFilebin.LOGGER.info("Retrying resource pack upload");
+            upload(path, null, false);
         }
     }
 
